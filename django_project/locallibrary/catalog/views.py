@@ -21,6 +21,10 @@ def index(request):
     hp_books = Book.objects.filter(title__contains='harry potter')
     num_hp_books = hp_books.count()
 
+    # Number of visits to this view, as counted in the session variable.
+    num_visits = request.session.get('num_visits', 0)
+    request.session['num_visits'] = num_visits + 1
+
     context = {
         'num_books': num_books,
         'num_instances': num_instances,
@@ -28,6 +32,7 @@ def index(request):
         'num_authors': num_authors,
         'num_genres': num_genres,
         'num_hp_books': num_hp_books,
+        'num_visits': num_visits,
     }
 
     # Render the HTML template index.html with the data in the context variable
@@ -37,9 +42,10 @@ from django.views import generic
 
 class BookListView(generic.ListView):
     model = Book
+    paginate_by = 3
 
     def get_queryset(self):
-        return Book.objects.filter(title__icontains='harry potter')[:5]  # Get 5 books containing the title hp
+        return Book.objects.all()
 
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get the context
@@ -59,3 +65,43 @@ class BookDetailView(generic.DetailView):
             raise Http404('Book does not exist')
 
         return render(request, 'catalog/book_detail.html', context={'book': book})
+
+class AuthorListView(generic.ListView):
+    """Generic class-based list view for a list of authors."""
+    model = Author
+    paginate_by = 1
+
+    def get_queryset(self):
+        return Author.objects.all()
+
+    def get_context_data(self, **kwargs):
+        # Call the base implementation first to get the context
+        context = super(AuthorListView, self).get_context_data(**kwargs)
+        # Create any data and add it to the context
+        context['some_data'] = 'This is just some data'
+        return context
+
+
+class AuthorDetailView(generic.DetailView):
+    """Generic class-based detail view for an author."""
+    model = Author
+
+    def author_detail_view(request, primary_key):
+        try:
+            author = Author.objects.get(pk=primary_key)
+        except Author.DoesNotExist:
+            raise Http404('Author does not exist')
+
+        return render(request, 'catalog/author_detail.html', context={'author': author})
+
+
+from django.contrib.auth.mixins import LoginRequiredMixin
+
+class LoanedBooksByUserListView(LoginRequiredMixin, generic.ListView):
+    """Generic class-based view listing books on loan to current user."""
+    model = BookInstance
+    template_name = 'catalog/bookinstance_list_borrowed_user.html'
+    paginate_by = 10
+
+    def get_queryset(self):
+        return BookInstance.objects.filter(borrower=self.request.user).filter(status__exact='o').order_by('due_back')
